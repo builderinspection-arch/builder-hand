@@ -1,4 +1,17 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import { SiteStats, TestimonialsSection } from '@/components/PublicSections';
+
+export const metadata: Metadata = {
+  title: 'Builder Hand | Reverse Auction Construction Marketplace',
+  description: 'Builder Hand helps homeowners hire verified tradies in Melbourne through reverse auction construction pricing, transparent quoting, and managed project delivery.',
+  keywords: ['reverse auction construction', 'hire tradies Melbourne', 'building inspection', 'flooring installation', 'construction marketplace'],
+  openGraph: {
+    title: 'Builder Hand | Reverse Auction Construction Marketplace',
+    description: 'Find trusted tradies, compare quotes, and manage construction jobs with Builder Hand.',
+    type: 'website',
+  },
+};
 
 export default function HomePage() {
   return (
@@ -18,14 +31,18 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <nav className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-700">
+            <nav aria-label="Primary navigation" className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-700">
               <Link href="/" className="hover:text-orange-600 transition-colors">Home</Link>
-              <Link href="/about" className="hover:text-orange-600 transition-colors">About Us</Link>
-              <Link href="/services" className="hover:text-orange-600 transition-colors">Services</Link>
-              <Link href="/contact" className="hover:text-orange-600 transition-colors">Contact Us</Link>
+              <Link href="/about" className="hover:text-orange-600 transition-colors">About</Link>
+              <Link href="/how-it-works" className="hover:text-orange-600 transition-colors">How It Works</Link>
+              <Link href="/for-contractors" className="hover:text-orange-600 transition-colors">For Contractors</Link>
             </nav>
 
             <div className="flex items-center gap-4">
+              <a href="tel:1300352914" className="hidden md:inline-flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors">
+                <span aria-hidden="true">📞</span>
+                1300 352 914
+              </a>
               <Link href="/login" className="text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors">
                 Sign In
               </Link>
@@ -39,14 +56,14 @@ export default function HomePage() {
 
       {/* Hero Section */}
       <main className="flex-grow">
-        <section className="bg-slate-900 text-white py-20 lg:py-28 relative overflow-hidden">
+        <section className="bg-slate-900 text-white py-20 lg:py-28 relative overflow-hidden" aria-labelledby="hero-heading">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div>
                 <span className="inline-block bg-orange-600/20 text-orange-400 text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full mb-4 border border-orange-500/30">
                   Managed Trade Marketplace
                 </span>
-                <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-6">
+                <h1 id="hero-heading" className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-6">
                   Quality Trades. <br />
                   <span className="text-orange-500">Transparent Pricing.</span> <br />
                   Managed Execution.
@@ -65,12 +82,11 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Status Card */}
-              <div className="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 sm:p-8 backdrop-blur shadow-2xl">
-                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <aside className="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 sm:p-8 backdrop-blur shadow-2xl" aria-label="Marketplace highlights">
+                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
                   Active Marketplace Status
-                </h3>
+                </h2>
 
                 <div className="space-y-4">
                   <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-700/50 flex justify-between items-center">
@@ -97,11 +113,24 @@ export default function HomePage() {
                     <span className="text-orange-400 font-semibold text-sm">Strict Oversight</span>
                   </div>
                 </div>
-              </div>
+              </aside>
             </div>
           </div>
         </section>
+        <SiteStats />
+        <TestimonialsSection />
       </main>
+
+      <footer className="border-t border-slate-200 bg-slate-900 text-slate-200">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div className="flex flex-wrap items-center gap-4">
+            <p>© 2026 Builder Hand. Transparent construction outcomes for homeowners and contractors.</p>
+            <Link href="/privacy-policy" className="text-slate-300 transition hover:text-orange-400">Privacy Policy</Link>
+            <Link href="/terms-and-conditions" className="text-slate-300 transition hover:text-orange-400">Terms & Conditions</Link>
+          </div>
+          <p className="font-medium text-orange-400">Have questions? Call our support team at 1300 352 914.</p>
+        </div>
+      </footer>
     </div>
   );
 }

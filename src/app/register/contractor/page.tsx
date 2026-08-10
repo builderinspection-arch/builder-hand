@@ -2,14 +2,18 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function ContractorRegistrationPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     fullName: '',
     companyName: '',
     abnAcn: '',
     mobileNumber: '',
     email: '',
+    password: '',
     tradeCategory: '',
     experienceLevel: '',
     businessAddress: '',
@@ -24,6 +28,8 @@ export default function ContractorRegistrationPage() {
     publicLiability: null as File | null,
     policeCheck: null as File | null,
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
 
   const tradeCategories = [
     'Plumbing',
@@ -33,6 +39,9 @@ export default function ContractorRegistrationPage() {
     'Roofing',
     'Tiling & Waterproofing',
     'Plastering & Painting',
+    'Painting & Decorating',
+    'Bathroom & Kitchen Renovations',
+    'Windows & Doors',
     'Landscaping',
     'General Building',
   ];
@@ -41,11 +50,48 @@ export default function ContractorRegistrationPage() {
     setDocuments((prev) => ({ ...prev, [docType]: file }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(
-      'Application Submitted! Your account is currently in "Pending" status. Our team will review your compliance documents within 24 hours.'
-    );
+    setIsSubmitting(true);
+    setMessage('');
+
+    const { data, error } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: {
+          full_name: formData.fullName,
+          role: 'contractor',
+        },
+      },
+    });
+
+    if (error) {
+      setMessage(error.message);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (data.user) {
+      const { error: profileError } = await supabase.from('profiles').upsert(
+        {
+          id: data.user.id,
+          full_name: formData.fullName,
+          role: 'contractor',
+          company_name: formData.companyName,
+          trade_category: formData.tradeCategory,
+        },
+        { onConflict: 'id' }
+      );
+
+      if (profileError) {
+        setMessage(`Account created, but profile update failed: ${profileError.message}`);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    router.push('/contractor/dashboard');
   };
 
   return (
@@ -143,6 +189,18 @@ export default function ContractorRegistrationPage() {
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   />
                 </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                  <input
+                    type="password"
+                    required
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                    placeholder="Create a password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  />
+                </div>
               </div>
             </div>
 
@@ -222,13 +280,13 @@ export default function ContractorRegistrationPage() {
               </div>
             </div>
 
-            {/* Section 3: Mandatory Document Uploads */}
+            {/* Section 3: Compliance & Documentation Portfolio */}
             <div>
               <h2 className="text-base font-bold text-slate-900 uppercase tracking-wider text-xs bg-slate-100 p-2 rounded mb-1">
-                3. Mandatory Compliance Document Uploads
+                3. COMPLIANCE & DOCUMENTATION PORTFOLIO
               </h2>
               <p className="text-xs text-slate-500 mb-4">
-                All 5 documents are strictly required for account verification before bidding on jobs.
+                Enhance your operational verification by submitting applicable licenses, certifications, or insurance coverage. While optional during initial registration, completing these records accelerates account review and onboarding.
               </p>
 
               <div className="space-y-3">
@@ -243,7 +301,6 @@ export default function ContractorRegistrationPage() {
                     <span className="text-xs font-semibold text-slate-800">{doc.label}</span>
                     <input
                       type="file"
-                      required
                       accept=".pdf,.png,.jpg,.jpeg"
                       onChange={(e) => handleFileChange(doc.key as keyof typeof documents, e.target.files?.[0] || null)}
                       className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-orange-600 file:text-white hover:file:bg-orange-700 cursor-pointer"
@@ -271,11 +328,14 @@ export default function ContractorRegistrationPage() {
               </Link>
               <button
                 type="submit"
-                className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-sm px-8 py-3 rounded-lg shadow-sm transition-colors"
+                disabled={isSubmitting}
+                className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-sm px-8 py-3 rounded-lg shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-orange-300"
               >
-                Submit Registration Application
+                {isSubmitting ? 'Creating account...' : 'Submit Registration Application'}
               </button>
             </div>
+
+            {message ? <p className="text-sm text-slate-600">{message}</p> : null}
           </form>
         </div>
       </main>

@@ -1,36 +1,74 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import Link from 'next/link';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
 type LiveBiddingRoomClientProps = {
   jobId: string;
 };
 
+type BidRecord = {
+  id?: string;
+  job_id?: string | null;
+  amount?: number | string | null;
+  contractor_name?: string | null;
+  created_at?: string | null;
+};
+
+type LeaderboardRow = {
+  rank: number;
+  name: string;
+  points: number;
+  bidAmount: number;
+  score: number;
+  isUser: boolean;
+};
+
+const BID_FLOOR = 1080;
+const USER_BIDDER_NAME = 'YOU (Apex Electrical)';
+const FALLBACK_INITIAL_BIDS: BidRecord[] = [
+  { amount: 1250, contractor_name: 'M****l S****h' },
+  { amount: 1300, contractor_name: 'J****n T****r' },
+  { amount: 1400, contractor_name: USER_BIDDER_NAME },
+];
+
+function buildLeaderboard(bids: BidRecord[], bidFloor: number) {
+  const rows = bids
+    .map((bid, index) => {
+      const amount = Number(bid.amount ?? 0);
+      const name = bid.contractor_name?.trim() || `Contractor ${index + 1}`;
+      return {
+        name,
+        points: Math.max(60, 95 - index * 3),
+        bidAmount: Number.isFinite(amount) ? amount : 0,
+        score: Number((85 + (bidFloor / Math.max(amount, 1)) * 10).toFixed(1)),
+        isUser: name === USER_BIDDER_NAME,
+      };
+    })
+    .sort((a, b) => b.bidAmount - a.bidAmount)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+
+  return rows as LeaderboardRow[];
+}
+
 export default function LiveBiddingRoomClient({ jobId }: LiveBiddingRoomClientProps) {
   const [timeLeft, setTimeLeft] = useState(892); // 14m 52s in seconds
   const [userBid, setUserBid] = useState('');
   const [bidError, setBidError] = useState('');
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>(() => buildLeaderboard(FALLBACK_INITIAL_BIDS, BID_FLOOR));
+  const [isLoadingBids, setIsLoadingBids] = useState(false);
+  const [isUsingLocalMode, setIsUsingLocalMode] = useState(false);
 
-  // Mock Job Data
   const jobDetails = {
     id: jobId,
     title: 'Switchboard Upgrade & Solar Prep',
     location: 'Tarneit, VIC 3029',
     tradeCategory: 'Electrical',
     homeownerQuote: '$2,400.00',
-    bidFloor: 1080, // Minimum allowed bid ($1,080.00)
-    currentLowestBid: 1250,
+    bidFloor: BID_FLOOR,
   };
 
-  // Mock Bidders Leaderboard (Anonymized)
-  const [leaderboard, setLeaderboard] = useState([
-    { rank: 1, name: 'M****l S****h', points: 90, bidAmount: 1250, score: 88.4, isUser: false },
-    { rank: 2, name: 'J****n T****r', points: 70, bidAmount: 1300, score: 82.1, isUser: false },
-    { rank: 3, name: 'YOU (Apex Electrical)', points: 74, bidAmount: 1400, score: 79.5, isUser: true },
-  ]);
-
-  // Countdown Timer Logic
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
@@ -38,17 +76,104 @@ export default function LiveBiddingRoomClient({ jobId }: LiveBiddingRoomClientPr
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    let ignore = false;
+    const canUseSupabase = isSupabaseConfigured;
+
+    const loadBids = async () => {
+      if (!canUseSupabase) {
+        setIsUsingLocalMode(true);
+        setLeaderboard(buildLeaderboard(FALLBACK_INITIAL_BIDS, BID_FLOOR));
+        setIsLoadingBids(false);
+        return;
+      }
+
+      setIsLoadingBids(true);
+      try {
+        const { data, error } = await supabase
+          .from('bids')
+          .select('*')
+          .eq('job_id', jobId)
+          .order('created_at', { ascending: false });
+
+        if (!ignore) {
+          if (error) {
+            throw error;
+          }
+
+          setIsUsingLocalMode(false);
+          setLeaderboard(buildLeaderboard((data ?? []) as BidRecord[], BID_FLOOR));
+          setIsLoadingBids(false);
+        }
+      } catch (error) {
+        if (!ignore) {
+          console.error('Unable to load bids', error);
+          setIsUsingLocalMode(true);
+          setLeaderboard(buildLeaderboard(FALLBACK_INITIAL_BIDS, BID_FLOOR));
+          setIsLoadingBids(false);
+        }
+      }
+    };
+
+    loadBids();
+
+    if (!canUseSupabase) {
+      return () => {
+        ignore = true;
+      };
+    }
+
+    try {
+      const channel = supabase.channel(`bids:${jobId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'bids',
+            filter: `job_id=eq.${jobId}`,
+          },
+          (payload: { new?: BidRecord }) => {
+            const newBid = payload.new as BidRecord;
+            setLeaderboard((prev) => {
+              const existing = prev.some((row) => row.name === newBid.contractor_name);
+              if (existing) {
+                return prev;
+              }
+
+              return buildLeaderboard([...(prev as unknown as BidRecord[]), newBid], BID_FLOOR);
+            });
+          },
+        )
+        .subscribe();
+
+      return () => {
+        ignore = true;
+        supabase.removeChannel(channel);
+      };
+    } catch (error) {
+      console.error('Unable to subscribe to bids', error);
+      return () => {
+        ignore = true;
+      };
+    }
+  }, [jobId]);
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleBidSubmit = (e: React.FormEvent) => {
+  const currentLowestBid = leaderboard.length > 0
+    ? Math.min(...leaderboard.map((row) => row.bidAmount))
+    : jobDetails.bidFloor;
+
+  const handleBidSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const numericBid = parseFloat(userBid);
 
-    if (isNaN(numericBid)) {
+    if (Number.isNaN(numericBid)) {
       setBidError('Please enter a valid dollar amount.');
       return;
     }
@@ -60,17 +185,53 @@ export default function LiveBiddingRoomClient({ jobId }: LiveBiddingRoomClientPr
 
     setBidError('');
 
-    // Simulate updating user's bid on leaderboard
-    setLeaderboard((prev) =>
-      prev.map((item) =>
-        item.isUser
-          ? { ...item, bidAmount: numericBid, score: Number((85 + (jobDetails.bidFloor / numericBid) * 10).toFixed(1)) }
-          : item
-      ).sort((a, b) => b.score - a.score).map((item, index) => ({ ...item, rank: index + 1 }))
-    );
+    if (!isSupabaseConfigured) {
+      setLeaderboard((prev) => {
+        const existingBidRecords = prev.length > 0
+          ? prev.map((row) => ({ amount: row.bidAmount, contractor_name: row.name }))
+          : FALLBACK_INITIAL_BIDS;
 
-    alert(`Bid of $${numericBid.toFixed(2)} submitted successfully! Leaderboard updated.`);
-    setUserBid('');
+        return buildLeaderboard(
+          [...existingBidRecords, { amount: numericBid, contractor_name: USER_BIDDER_NAME }],
+          BID_FLOOR,
+        );
+      });
+      setUserBid('');
+      setIsUsingLocalMode(true);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('bids').insert([
+        {
+          job_id: jobId,
+          amount: numericBid,
+          contractor_name: USER_BIDDER_NAME,
+        },
+      ]);
+
+      if (error) {
+        throw error;
+      }
+
+      setUserBid('');
+      setIsUsingLocalMode(false);
+    } catch (error) {
+      console.error('Unable to save bid', error);
+      setLeaderboard((prev) => {
+        const existingBidRecords = prev.length > 0
+          ? prev.map((row) => ({ amount: row.bidAmount, contractor_name: row.name }))
+          : FALLBACK_INITIAL_BIDS;
+
+        return buildLeaderboard(
+          [...existingBidRecords, { amount: numericBid, contractor_name: USER_BIDDER_NAME }],
+          BID_FLOOR,
+        );
+      });
+      setUserBid('');
+      setIsUsingLocalMode(true);
+      setBidError('Saved locally because the live connection is unavailable.');
+    }
   };
 
   return (
@@ -127,7 +288,7 @@ export default function LiveBiddingRoomClient({ jobId }: LiveBiddingRoomClientPr
               </div>
               <div>
                 <span className="text-slate-400 block mb-1">Current Lowest Bid</span>
-                <span className="text-base font-bold text-white">${jobDetails.currentLowestBid.toFixed(2)}</span>
+                <span className="text-base font-bold text-white">${currentLowestBid.toFixed(2)}</span>
                 <p className="text-[10px] text-slate-500 mt-0.5">Note: Lowest price does not automatically win.</p>
               </div>
             </div>
@@ -152,28 +313,38 @@ export default function LiveBiddingRoomClient({ jobId }: LiveBiddingRoomClientPr
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
-                  {leaderboard.map((row) => (
-                    <tr
-                      key={row.name}
-                      className={row.isUser ? 'bg-orange-950/40 font-semibold text-orange-200' : 'text-slate-300'}
-                    >
-                      <td className="py-3 px-3">
-                        <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center font-bold text-xs ${
-                          row.rank === 1 ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-white'
-                        }`}>
-                          #{row.rank}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">{row.name}</td>
-                      <td className="py-3 px-3">
-                        <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[11px]">
-                          {row.points} pts
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-sm text-white">${row.bidAmount.toFixed(2)}</td>
-                      <td className="py-3 px-3 text-right font-bold text-orange-400">{row.score}</td>
+                  {isLoadingBids ? (
+                    <tr>
+                      <td colSpan={5} className="py-3 px-3 text-slate-400">Loading bids...</td>
                     </tr>
-                  ))}
+                  ) : leaderboard.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-3 px-3 text-slate-400">No bids yet. Be the first to place one.</td>
+                    </tr>
+                  ) : (
+                    leaderboard.map((row) => (
+                      <tr
+                        key={`${row.name}-${row.bidAmount}`}
+                        className={row.isUser ? 'bg-orange-950/40 font-semibold text-orange-200' : 'text-slate-300'}
+                      >
+                        <td className="py-3 px-3">
+                          <span className={`w-6 h-6 rounded-full inline-flex items-center justify-center font-bold text-xs ${
+                            row.rank === 1 ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-white'
+                          }`}>
+                            #{row.rank}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">{row.name}</td>
+                        <td className="py-3 px-3">
+                          <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[11px]">
+                            {row.points} pts
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-sm text-white">${row.bidAmount.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-right font-bold text-orange-400">{row.score}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -235,6 +406,7 @@ export default function LiveBiddingRoomClient({ jobId }: LiveBiddingRoomClientPr
             <div className="mt-6 pt-4 border-t border-slate-700/60 text-[11px] text-slate-400 space-y-1">
               <p>✔️ Floor Price enforced at $1,080.00.</p>
               <p>✔️ Terms & Conditions accepted automatically upon winning.</p>
+              {isUsingLocalMode ? <p>🟡 Running in local/demo mode while Supabase is unavailable.</p> : null}
             </div>
           </div>
         </div>
