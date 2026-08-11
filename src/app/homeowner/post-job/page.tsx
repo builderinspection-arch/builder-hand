@@ -12,6 +12,9 @@ export default function HomeownerPostJobPage() {
   const [location, setLocation] = useState('');
   const [budgetEstimate, setBudgetEstimate] = useState('');
   const [floorPrice, setFloorPrice] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -35,6 +38,9 @@ export default function HomeownerPostJobPage() {
           location,
           budget_estimate: Number(budgetEstimate),
           floor_price: Number(floorPrice),
+          customer_name: customerName,
+          customer_email: customerEmail,
+          customer_phone: customerPhone,
         },
       ]);
 
@@ -102,6 +108,42 @@ export default function HomeownerPostJobPage() {
                 placeholder="e.g. Melbourne, VIC"
               />
             </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-semibold">Full name</label>
+              <input
+                required
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="e.g. Jane Doe"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold">Email address</label>
+              <input
+                required
+                type="email"
+                value={customerEmail}
+                onChange={(event) => setCustomerEmail(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                placeholder="e.g. jane@example.com"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-semibold">Phone number</label>
+            <input
+              required
+              type="tel"
+              value={customerPhone}
+              onChange={(event) => setCustomerPhone(event.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2"
+              placeholder="e.g. +61 400 000 000"
+            />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
