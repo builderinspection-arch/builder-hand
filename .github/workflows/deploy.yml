@@ -39,4 +39,3 @@ jobs:
           port: 21
           security: loose
           dangerous-clean-slate: true
-          dangerous-clean-slate: true
