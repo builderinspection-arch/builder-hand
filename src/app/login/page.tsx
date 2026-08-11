@@ -17,15 +17,19 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setMessage('');
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setMessage(error.message);
       setIsSubmitting(false);
+      setMessage('Invalid email or password. Please try again.');
       return;
     }
 
-    router.push('/homeowner/dashboard');
+    const role = data?.user?.user_metadata?.role || data?.user?.app_metadata?.role;
+    const redirectPath = role === 'contractor' ? '/contractor/dashboard' : '/homeowner/dashboard';
+
+    setIsSubmitting(false);
+    router.push(redirectPath);
   }
 
   return (
@@ -65,7 +69,11 @@ export default function LoginPage() {
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>
 
-          {message ? <p className="text-sm text-slate-600">{message}</p> : null}
+          {message ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              {message}
+            </div>
+          ) : null}
 
           <p className="text-sm text-slate-600">
             Need an account?{' '}
